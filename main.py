@@ -11,6 +11,7 @@ import yt_dlp
 import threading
 import time
 from tqdm import tqdm
+import json
 
 # --- User data directory for ffmpeg ---
 def get_userdata_ffmpeg_dir():
@@ -234,20 +235,16 @@ def display_video_info(info):
     print(f"📅 Upload Date: {info.get('upload_date', 'Unknown')}")
     print("-" * 60)
 
-def get_best_video_format(info):
-    """Get the best available video format up to 1080p 60fps"""
+def get_best_video_format(info, preferred_quality="1080p"):
+    """Get the best available video format up to preferred quality"""
     formats = []
-    
     if 'formats' not in info:
         print("❌ No formats available for this video.")
         return None
-    
-    # Filter only video-only formats
     for fmt in info['formats']:
         if (fmt.get('vcodec') != 'none' and 
             fmt.get('acodec') == 'none' and 
             fmt.get('height') is not None):
-            
             format_info = {
                 'format_id': fmt.get('format_id', 'Unknown'),
                 'ext': fmt.get('ext', 'Unknown'),
@@ -259,29 +256,24 @@ def get_best_video_format(info):
                 'vcodec': fmt.get('vcodec'),
                 'format': fmt
             }
-            
             formats.append(format_info)
-    
     if not formats:
         print("❌ No video-only formats found for this video.")
         return None
-    
-    # Sort by quality (height and fps) - best first
     formats.sort(key=lambda x: (-(x['height'] or 0), -(x['fps'] or 0)))
-    
-    # Find the best format up to 1080p 60fps
-    target_height = 1080
+    quality_map = {
+        "4k": 2160,
+        "2k": 1440,
+        "1080p": 1080,
+        "720p": 720
+    }
+    target_height = quality_map.get(preferred_quality, 1080)
     target_fps = 60
-    
     for fmt in formats:
         height = fmt['height'] or 0
         fps = fmt['fps'] or 0
-        
-        # If we find 1080p 60fps or lower, use it
         if height <= target_height and fps <= target_fps:
             return fmt
-    
-    # If no format meets the criteria, use the best available
     return formats[0]
 
 def display_selected_format(format_info):
@@ -377,73 +369,119 @@ def format_filename(title):
     
     return title.strip()
 
+# --- Config file helpers ---
+def get_userdata_config_dir():
+    if sys.platform == 'win32':
+        base = os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA')
+        if not base:
+            base = os.path.expanduser('~')
+        return os.path.join(base, 'YouTubeDownloader')
+    else:
+        return os.path.expanduser('~/.local/share/YouTubeDownloader')
+
+def get_config_path():
+    return os.path.join(get_userdata_config_dir(), 'config.json')
+
+def load_config():
+    config_path = get_config_path()
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    # Default config
+    return {"quality": "1080p"}
+
+def save_config(config):
+    config_dir = get_userdata_config_dir()
+    os.makedirs(config_dir, exist_ok=True)
+    config_path = get_config_path()
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=2)
+
+def settings_menu():
+    config = load_config()
+    valid_qualities = ['4k', '2k', '1080p', '720p']
+    current_quality = config.get('quality', '1080p')
+    if current_quality not in valid_qualities:
+        current_quality = '1080p'
+    while True:
+        print("\n===== Settings =====")
+        print(f"1. Preferred Quality: {current_quality}")
+        print("2. Back to downloader")
+        choice = input("Select an option: ").strip()
+        if choice == '1':
+            print("\nSelect preferred video quality:")
+            print("1. 4K (2160p)")
+            print("2. 2K (1440p)")
+            print("3. 1080p")
+            print("4. 720p")
+            q_choice = input("Enter choice (1-4): ").strip()
+            q_map = {
+                '1': '4k',
+                '2': '2k',
+                '3': '1080p',
+                '4': '720p'
+            }
+            if q_choice in q_map:
+                config['quality'] = q_map[q_choice]
+                save_config(config)
+                current_quality = q_map[q_choice]
+                print(f"✅ Preferred quality set to {q_map[q_choice]}")
+            else:
+                print("❌ Invalid choice.")
+        elif choice == '2':
+            break
+        else:
+            print("❌ Invalid option.")
+
 def main():
-    """Main application function"""
     clear_screen()
     print_banner()
-    
-    # Check for FFmpeg at startup
     print("🔍 Checking for FFmpeg...")
     ffmpeg_path = get_ffmpeg_path()
     if ffmpeg_path:
         print("✅ FFmpeg is ready!")
     else:
         print("❌ FFmpeg installation failed. The application may not work properly.")
-    
     print("\n" + "="*60)
-    
     while True:
         try:
-            # Get YouTube URL from user
             print("\n🔗 Please enter a YouTube video URL:")
-            print("   (or type 'quit' to exit)")
+            print("   (type 'settings' to change quality, or 'quit' to exit)")
             url = input("   URL: ").strip()
-            
             if url.lower() in ['quit', 'exit', 'q']:
                 print("\n👋 Thank you for using YouTube Video Downloader!")
                 break
-            
+            if url.lower() == 'settings':
+                settings_menu()
+                clear_screen()
+                print_banner()
+                continue
             if not url:
                 print("❌ Please enter a valid URL.")
                 continue
-            
-            # Validate YouTube URL
             if not is_valid_youtube_url(url):
                 print("❌ Invalid YouTube URL. Please enter a valid YouTube video URL.")
                 continue
-            
             print("\n⏳ Fetching video information...")
-            
-            # Get video information
             info = get_video_info(url)
             if not info:
                 continue
-            
-            # Display video information
             display_video_info(info)
-            
-            # Get the best available video format
-            selected_format = get_best_video_format(info)
+            config = load_config()
+            preferred_quality = config.get('quality', '1080p')
+            selected_format = get_best_video_format(info, preferred_quality)
             if not selected_format:
                 continue
-            
-            # Display selected format
             display_selected_format(selected_format)
-            
-            # Use current directory as default
             output_dir = os.getcwd()
-            
-            # Format filename
             base_filename = format_filename(info.get('title', 'video'))
             filename = f"{base_filename}.mp4"
-            
-            # Download the video with audio (no confirmation needed)
             download_video_with_audio(url, selected_format['format_id'], output_dir, filename)
-            
-            # Clear screen for next download
             clear_screen()
             print_banner()
-            
         except KeyboardInterrupt:
             print("\n\n👋 Download cancelled. Goodbye!")
             break
