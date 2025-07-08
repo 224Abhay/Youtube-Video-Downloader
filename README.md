@@ -14,6 +14,7 @@ A powerful and user-friendly YouTube video downloader application built with Pyt
 - 🔧 **Auto FFmpeg**: Automatically downloads and installs FFmpeg
 - 🛡️ **Antivirus Friendly**: Built with antivirus-friendly options
 - 🚀 **No Confirmation**: Streamlined download process
+- ⚙️ **Settings Menu**: Change preferred video quality (4K, 2K, 1080p, 720p) from within the app
 
 ## 📋 Requirements
 
@@ -65,6 +66,17 @@ A powerful and user-friendly YouTube video downloader application built with Pyt
 3. **Review video information** (title, duration, views, etc.)
 4. **Wait for automatic download** - no quality selection needed
 5. **Find your video** in the current directory
+
+### ⚙️ Settings Menu (Change Preferred Quality)
+
+- At any prompt, type `settings` and press Enter.
+- The settings menu will appear, allowing you to select your preferred video quality:
+  - 4K (2160p)
+  - 2K (1440p)
+  - 1080p
+  - 720p
+- Your choice will be saved and used for future downloads.
+- Type `2` in the settings menu to return to the downloader.
 
 ### Supported URL Formats
 
